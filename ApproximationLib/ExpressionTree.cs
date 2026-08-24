@@ -1,164 +1,178 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Globalization;
 
-namespace ApproximationLib
+namespace ApproximationLib;
+
+/// <summary>A mathematical expression represented as a tree.</summary>
+public sealed class ExpressionTree
 {
-    public class ExpressionTree
+    private const double Epsilon = 1e-12;
+    private const double Limit = 1e100;
+
+    public static readonly IReadOnlySet<string> SupportedFunctions = new HashSet<string>(StringComparer.Ordinal)
     {
-        public string Value;
-        public ExpressionTree Left;
-        public ExpressionTree Right;
-        public double Fitness;
-        public double Mse;
-        public int Size;
+        "+", "-", "*", "protectedDiv", "pow", "sin", "cos", "tan", "asin", "acos", "atan",
+        "sinh", "cosh", "tanh", "log", "log10", "sqrt", "abs", "exp", "min", "max"
+    };
 
-        public ExpressionTree(string value, ExpressionTree left = null, ExpressionTree right = null)
+    internal static readonly IReadOnlySet<string> UnaryFunctions = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "log", "log10", "sqrt", "abs", "exp"
+    };
+
+    public string Value { get; set; }
+    public ExpressionTree? Left { get; set; }
+    public ExpressionTree? Right { get; set; }
+    public double Fitness { get; internal set; } = double.PositiveInfinity;
+    public double Mse { get; internal set; } = double.PositiveInfinity;
+    public double ValidationLoss { get; internal set; } = double.PositiveInfinity;
+    public int Size { get; internal set; }
+    internal double[] CaseErrors { get; set; } = Array.Empty<double>();
+    internal double LinearScale { get; set; } = 1.0;
+    internal double LinearOffset { get; set; }
+
+    public ExpressionTree(string value, ExpressionTree? left = null, ExpressionTree? right = null)
+    {
+        Value = value ?? throw new ArgumentNullException(nameof(value));
+        Left = left;
+        Right = right;
+    }
+
+    public ExpressionTree(double constant)
+        : this(constant.ToString("R", CultureInfo.InvariantCulture)) { }
+
+    public bool IsLeaf => Left is null && Right is null;
+    public bool IsConstant => IsLeaf && double.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+
+    public double Evaluate(double x) => Evaluate(new[] { x });
+
+    public double Evaluate(IReadOnlyList<double> variables)
+    {
+        double value = EvaluateCore(variables);
+        return FiniteOrPenalty(value);
+    }
+
+    internal double EvaluateModel(IReadOnlyList<double> variables) =>
+        FiniteOrPenalty(LinearScale * EvaluateCore(variables) + LinearOffset);
+
+    private double EvaluateCore(IReadOnlyList<double> variables)
+    {
+        if (TryVariableIndex(Value, out int index))
         {
-            Value = value;
-            Left = left;
-            Right = right;
+            if ((uint)index >= (uint)variables.Count) throw new ArgumentException($"Variable x{index} is missing from the input row.");
+            return variables[index];
         }
 
-        public ExpressionTree(double constant) : this(constant.ToString("F4")) { }
+        if (double.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double constant)) return constant;
 
-        public bool IsLeaf => Left == null && Right == null;
+        if (Left is null) return Limit;
+        double a = Left.EvaluateCore(variables);
 
-        public double Evaluate(double x)
+        if (Right is null)
         {
-            if (Value == "x")
-                return x;
-
-            if (double.TryParse(Value, out double num))
-                return num;
-
-            // Унарные функции
-            if (Left != null && Right == null)
+            return FiniteOrPenalty(Value switch
             {
-                double arg = Left.Evaluate(x);
-                switch (Value)
-                {
-                    case "sin": return Math.Sin(arg);
-                    case "cos": return Math.Cos(arg);
-                    case "tan": return SafeTan(arg);
-                    case "asin": return SafeAsin(arg);
-                    case "acos": return SafeAcos(arg);
-                    case "atan": return Math.Atan(arg);
-                    case "sinh": return Math.Sinh(arg);
-                    case "cosh": return Math.Cosh(arg);
-                    case "tanh": return Math.Tanh(arg);
-                    case "log": return SafeLog(arg);
-                    case "log10": return SafeLog10(arg);
-                    case "sqrt": return SafeSqrt(arg);
-                    case "abs": return Math.Abs(arg);
-                    case "exp": return Math.Exp(arg);
-                }
-            }
-
-            // Бинарные функции
-            if (Left != null && Right != null)
-            {
-                double leftVal = Left.Evaluate(x);
-                double rightVal = Right.Evaluate(x);
-
-                switch (Value)
-                {
-                    case "+": return leftVal + rightVal;
-                    case "-": return leftVal - rightVal;
-                    case "*": return leftVal * rightVal;
-                    case "protectedDiv": return Math.Abs(rightVal) < 1e-9 ? 1.0 : leftVal / rightVal;
-                    case "pow": return SafePow(leftVal, rightVal);
-                    case "min": return Math.Min(leftVal, rightVal);
-                    case "max": return Math.Max(leftVal, rightVal);
-                }
-            }
-
-            return 0.0;
+                "sin" => Math.Sin(a),
+                "cos" => Math.Cos(a),
+                "tan" => Math.Abs(Math.Cos(a)) < 1e-9 ? 0.0 : Math.Tan(a),
+                "asin" => Math.Asin(Math.Clamp(a, -1.0, 1.0)),
+                "acos" => Math.Acos(Math.Clamp(a, -1.0, 1.0)),
+                "atan" => Math.Atan(a),
+                "sinh" => Math.Sinh(Math.Clamp(a, -30.0, 30.0)),
+                "cosh" => Math.Cosh(Math.Clamp(a, -30.0, 30.0)),
+                "tanh" => Math.Tanh(a),
+                "log" => Math.Log(Math.Abs(a) + Epsilon),
+                "log10" => Math.Log10(Math.Abs(a) + Epsilon),
+                "sqrt" => Math.Sqrt(Math.Abs(a)),
+                "abs" => Math.Abs(a),
+                "exp" => Math.Exp(Math.Clamp(a, -60.0, 60.0)),
+                _ => Limit
+            });
         }
 
-        private double SafeTan(double x)
+        double b = Right.EvaluateCore(variables);
+        return FiniteOrPenalty(Value switch
         {
-            double cos = Math.Cos(x);
-            return Math.Abs(cos) < 1e-9 ? 0.0 : Math.Sin(x) / cos;
-        }
+            "+" => a + b,
+            "-" => a - b,
+            "*" => a * b,
+            "protectedDiv" => Math.Abs(b) < Epsilon ? a : a / b,
+            "pow" => SafePow(a, b),
+            "min" => Math.Min(a, b),
+            "max" => Math.Max(a, b),
+            _ => Limit
+        });
+    }
 
-        private double SafeAsin(double x)
+    public int GetSize() => 1 + (Left?.GetSize() ?? 0) + (Right?.GetSize() ?? 0);
+
+    public int GetDepth() => IsLeaf ? 1 : 1 + Math.Max(Left?.GetDepth() ?? 0, Right?.GetDepth() ?? 0);
+
+    public string ToFunctionalString(IReadOnlyList<string>? featureNames = null)
+    {
+        if (IsLeaf) return DisplayLeaf(featureNames);
+        if (Right is null) return $"{Value}({Left!.ToFunctionalString(featureNames)})";
+        string op = Value switch { "+" => "add", "-" => "sub", "*" => "mul", "protectedDiv" => "div", _ => Value };
+        return $"{op}({Left!.ToFunctionalString(featureNames)}, {Right.ToFunctionalString(featureNames)})";
+    }
+
+    public string ToInfixString(IReadOnlyList<string>? featureNames = null)
+    {
+        if (IsLeaf) return DisplayLeaf(featureNames);
+        if (Right is null) return $"{Value}({Left!.ToInfixString(featureNames)})";
+        string left = Left!.ToInfixString(featureNames);
+        string right = Right.ToInfixString(featureNames);
+        return Value switch
         {
-            if (x < -1.0) x = -1.0;
-            if (x > 1.0) x = 1.0;
-            return Math.Asin(x);
-        }
+            "+" or "-" or "*" => $"({left} {Value} {right})",
+            "protectedDiv" => $"({left} / {right})",
+            "pow" => $"pow({left}, {right})",
+            _ => $"{Value}({left}, {right})"
+        };
+    }
 
-        private double SafeAcos(double x)
+    public override string ToString() => ToFunctionalString();
+
+    internal ExpressionTree DeepClone(bool metadata = false)
+    {
+        var clone = new ExpressionTree(Value, Left?.DeepClone(metadata), Right?.DeepClone(metadata));
+        if (metadata)
         {
-            if (x < -1.0) x = -1.0;
-            if (x > 1.0) x = 1.0;
-            return Math.Acos(x);
+            clone.Fitness = Fitness;
+            clone.Mse = Mse;
+            clone.ValidationLoss = ValidationLoss;
+            clone.Size = Size;
+            clone.CaseErrors = (double[])CaseErrors.Clone();
+            clone.LinearScale = LinearScale;
+            clone.LinearOffset = LinearOffset;
         }
+        return clone;
+    }
 
-        private double SafeLog(double x)
-        {
-            return x <= 0 ? -10.0 : Math.Log(x);
-        }
+    internal static bool IsUnary(string value) => UnaryFunctions.Contains(value);
 
-        private double SafeLog10(double x)
-        {
-            return x <= 0 ? -10.0 : Math.Log10(x);
-        }
+    internal static bool TryVariableIndex(string value, out int index)
+    {
+        if (value == "x") { index = 0; return true; }
+        return value.Length > 1 && value[0] == 'x' && int.TryParse(value.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out index);
+    }
 
-        private double SafeSqrt(double x)
-        {
-            return x < 0 ? 0.0 : Math.Sqrt(x);
-        }
+    private string DisplayLeaf(IReadOnlyList<string>? featureNames)
+    {
+        if (!TryVariableIndex(Value, out int index)) return Value;
+        if (featureNames is not null && index < featureNames.Count) return featureNames[index];
+        return index == 0 ? "x" : $"x{index}";
+    }
 
-        private double SafePow(double a, double b)
-        {
-            try
-            {
-                if (a < 0 && Math.Abs(b - Math.Round(b)) > 1e-9)
-                    return 0.0;
-                double result = Math.Pow(a, b);
-                return double.IsNaN(result) || double.IsInfinity(result) ? 0.0 : result;
-            }
-            catch
-            {
-                return 0.0;
-            }
-        }
+    private static double SafePow(double a, double b)
+    {
+        b = Math.Clamp(b, -12.0, 12.0);
+        if (a < 0 && Math.Abs(b - Math.Round(b)) > 1e-9) return 0.0;
+        return Math.Pow(a, b);
+    }
 
-        public int GetSize()
-        {
-            return 1 + (Left?.GetSize() ?? 0) + (Right?.GetSize() ?? 0);
-        }
-
-        public int GetDepth()
-        {
-            if (IsLeaf) return 1;
-            int leftDepth = Left?.GetDepth() ?? 0;
-            int rightDepth = Right?.GetDepth() ?? 0;
-            return 1 + Math.Max(leftDepth, rightDepth);
-        }
-
-        public override string ToString()
-        {
-            if (IsLeaf)
-                return Value == "x" ? "x" : Value;
-
-            if (Right == null)
-                return $"{Value}({Left})";
-
-            string op = Value switch
-            {
-                "+" => "add",
-                "-" => "sub",
-                "*" => "mul",
-                "protectedDiv" => "div",
-                _ => Value
-            };
-
-            return $"{op}({Left}, {Right})";
-        }
+    private static double FiniteOrPenalty(double value)
+    {
+        if (!double.IsFinite(value)) return Math.CopySign(Limit, value);
+        return Math.Clamp(value, -Limit, Limit);
     }
 }
