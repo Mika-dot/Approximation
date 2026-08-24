@@ -52,9 +52,9 @@ internal static class ReportWriter
         double Y(double v) => height - pad - (v - min) / (max - min) * (height - 2 * pad);
         var svg = BeginSvg(width, height);
         Grid(svg, width, height, pad);
-        svg.AppendLine($"<line class='ideal' x1='{X(min):F2}' y1='{Y(min):F2}' x2='{X(max):F2}' y2='{Y(max):F2}'/>");
+        svg.AppendLine(I($"<line class='ideal' x1='{X(min):F2}' y1='{Y(min):F2}' x2='{X(max):F2}' y2='{Y(max):F2}'/>"));
         for (int i = 0; i < actual.Length; i++)
-            svg.AppendLine($"<circle class='point' cx='{X(actual[i]):F2}' cy='{Y(predicted[i]):F2}' r='3.5'><title>y={F(actual[i])}; ŷ={F(predicted[i])}</title></circle>");
+            svg.AppendLine(I($"<circle class='point' cx='{X(actual[i]):F2}' cy='{Y(predicted[i]):F2}' r='3.5'><title>y={F(actual[i])}; ŷ={F(predicted[i])}</title></circle>"));
         svg.AppendLine($"<text class='caption' x='{width / 2}' y='{height - 7}' text-anchor='middle'>Наблюдаемое y</text>");
         svg.AppendLine("</svg>");
         return svg.ToString();
@@ -70,8 +70,8 @@ internal static class ReportWriter
         double X(int i) => pad + i / (double)Math.Max(1, history.Count - 1) * (width - 2 * pad);
         double Y(double value) => height - pad - (Math.Log10(Math.Max(0, value) + 1e-16) - min) / (max - min) * (height - 2 * pad);
         var svg = BeginSvg(width, height); Grid(svg, width, height, pad);
-        string train = string.Join(" ", history.Select((h, i) => $"{X(i):F2},{Y(h.BestTrainingLoss):F2}"));
-        string validation = string.Join(" ", history.Select((h, i) => $"{X(i):F2},{Y(h.BestValidationLoss):F2}"));
+        string train = string.Join(" ", history.Select((h, i) => I($"{X(i):F2},{Y(h.BestTrainingLoss):F2}")));
+        string validation = string.Join(" ", history.Select((h, i) => I($"{X(i):F2},{Y(h.BestValidationLoss):F2}")));
         svg.AppendLine($"<polyline class='line' points='{train}'/>");
         svg.AppendLine($"<polyline points='{validation}' fill='none' stroke='#7da7ff' stroke-width='2' stroke-dasharray='6 5'/>");
         svg.AppendLine($"<text class='caption' x='{width / 2}' y='{height - 7}' text-anchor='middle'>Поколение · логарифмическая шкала ошибки</text>");
@@ -87,10 +87,11 @@ internal static class ReportWriter
         for (int i = 0; i <= 5; i++)
         {
             double x = pad + i / 5.0 * (width - 2 * pad), y = pad + i / 5.0 * (height - 2 * pad);
-            svg.AppendLine($"<line class='gridline' x1='{x:F2}' y1='{pad}' x2='{x:F2}' y2='{height - pad}'/><line class='gridline' x1='{pad}' y1='{y:F2}' x2='{width - pad}' y2='{y:F2}'/>");
+            svg.AppendLine(I($"<line class='gridline' x1='{x:F2}' y1='{pad}' x2='{x:F2}' y2='{height - pad}'/><line class='gridline' x1='{pad}' y1='{y:F2}' x2='{width - pad}' y2='{y:F2}'/>"));
         }
         svg.AppendLine($"<line class='axis' x1='{pad}' y1='{height - pad}' x2='{width - pad}' y2='{height - pad}'/><line class='axis' x1='{pad}' y1='{pad}' x2='{pad}' y2='{height - pad}'/>");
     }
 
     private static string F(double value) => value.ToString("G6", CultureInfo.InvariantCulture);
+    private static string I(FormattableString value) => value.ToString(CultureInfo.InvariantCulture);
 }
