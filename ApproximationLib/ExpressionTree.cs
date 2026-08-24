@@ -24,6 +24,7 @@ public sealed class ExpressionTree
     public ExpressionTree? Right { get; set; }
     public double Fitness { get; internal set; } = double.PositiveInfinity;
     public double Mse { get; internal set; } = double.PositiveInfinity;
+    public double TrainingLoss { get; internal set; } = double.PositiveInfinity;
     public double ValidationLoss { get; internal set; } = double.PositiveInfinity;
     public int Size { get; internal set; }
     internal double[] CaseErrors { get; set; } = Array.Empty<double>();
@@ -139,6 +140,7 @@ public sealed class ExpressionTree
         {
             clone.Fitness = Fitness;
             clone.Mse = Mse;
+            clone.TrainingLoss = TrainingLoss;
             clone.ValidationLoss = ValidationLoss;
             clone.Size = Size;
             clone.CaseErrors = (double[])CaseErrors.Clone();

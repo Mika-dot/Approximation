@@ -31,7 +31,7 @@ internal static class ReportWriter
         html.AppendLine(ScatterSvg(actual, predicted)); html.AppendLine("</section>");
         html.AppendLine("<section class='panel'><h2>Сходимость</h2><p class='muted'>Ошибка лучшей модели на обучении и валидации.</p>");
         html.AppendLine(HistorySvg(result.History)); html.AppendLine("</section></div>");
-        html.AppendLine("<section class='panel'><h2>Парето-фронт: точность ↔ сложность</h2><table class='pareto'><thead><tr><th>Узлы</th><th>Train MSE</th><th>Validation</th><th>Формула</th></tr></thead><tbody>");
+        html.AppendLine("<section class='panel'><h2>Парето-фронт: точность ↔ сложность</h2><table class='pareto'><thead><tr><th>Узлы</th><th>Train loss</th><th>Validation loss</th><th>Формула</th></tr></thead><tbody>");
         foreach (ParetoSolution item in result.ParetoFront.Take(20))
             html.AppendLine($"<tr><td>{item.Size}</td><td>{F(item.TrainingLoss)}</td><td>{F(item.ValidationLoss)}</td><td><code>{WebUtility.HtmlEncode(item.Formula)}</code></td></tr>");
         html.AppendLine("</tbody></table></section>");

@@ -68,7 +68,7 @@ public sealed class SymbolicRegressor
             ExpressionTree best = SelectBestGeneralizing(population);
             double selectionLoss = FiniteSelectionLoss(best);
             double medianFitness = Median(population.Select(p => p.Fitness));
-            _history.Add(new GenerationData(generation + 1, best.Mse, best.ValidationLoss,
+            _history.Add(new GenerationData(generation + 1, best.TrainingLoss, best.ValidationLoss,
                 medianFitness, best.Size, ExpressionSimplifier.MaterializeLinearScaling(best).ToInfixString(_featureNames)));
 
             if (globalBest is null || IsBetter(best, globalBest)) globalBest = best.DeepClone(metadata: true);
@@ -228,7 +228,7 @@ public sealed class SymbolicRegressor
         tree.Size = tree.GetSize();
         if (!valid)
         {
-            tree.Fitness = tree.Mse = tree.ValidationLoss = double.PositiveInfinity;
+            tree.Fitness = tree.Mse = tree.TrainingLoss = tree.ValidationLoss = double.PositiveInfinity;
             tree.CaseErrors = Enumerable.Repeat(double.PositiveInfinity, train.Length).ToArray();
             return;
         }
@@ -249,6 +249,7 @@ public sealed class SymbolicRegressor
 
         tree.Mse = squared.Average();
         double trainingLoss = CalculateLoss(tree.CaseErrors);
+        tree.TrainingLoss = trainingLoss;
         tree.ValidationLoss = validation.Length == 0
             ? trainingLoss
             : CalculateLoss(validation.Select(i => Math.Abs(tree.EvaluateModel(x[i]) - y[i])));
@@ -477,7 +478,7 @@ public sealed class SymbolicRegressor
     {
         ExpressionTree model = ExpressionSimplifier.MaterializeLinearScaling(tree);
         return new ParetoSolution(model.ToInfixString(_featureNames), model.ToFunctionalString(_featureNames),
-            model.GetSize(), tree.Mse, tree.ValidationLoss);
+            model.GetSize(), tree.TrainingLoss, tree.ValidationLoss);
     }).ToArray();
 
     private static ExpressionTree SelectBestGeneralizing(List<ExpressionTree> population) =>
