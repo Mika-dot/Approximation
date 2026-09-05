@@ -121,21 +121,10 @@ jobs:
             gh release upload $env:TAG @assets --clobber --repo $env:GITHUB_REPOSITORY
           }
           else {
-            $notes = @'
-Windows x64 release of the universal symbolic-regression branch.
-
-Assets:
-- Approximation.exe — self-contained Windows x64 demo/CSV CLI; .NET runtime is bundled.
-- ApproximationLib.dll — .NET 8 symbolic-regression library for integration into other applications.
-- ApproximationLib.xml — XML API documentation.
-- SHA256SUMS.txt — SHA-256 checksums for the executable and library.
-
-The release job builds with warnings as errors, runs the repository test executable, and smoke-tests the published EXE before publishing these assets.
-'@
             gh release create $env:TAG @assets `
               --repo $env:GITHUB_REPOSITORY `
               --target $env:HEAD_SHA `
               --title 'Approximation Symbolic Regression v0.1.0' `
-              --notes $notes
+              --notes-file docs/releases/symbolic-regression-v0.1.0.md
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
