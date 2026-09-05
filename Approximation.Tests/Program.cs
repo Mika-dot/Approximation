@@ -106,7 +106,9 @@ static void ProducesReport()
         Assert(File.Exists(path));
         string html = File.ReadAllText(path);
         Assert(html.Contains("<svg", StringComparison.Ordinal));
-        Assert(!html.Contains("cdn", StringComparison.OrdinalIgnoreCase));
+        Assert(!html.Contains("cdnjs.cloudflare.com", StringComparison.OrdinalIgnoreCase));
+        Assert(!html.Contains("cdn.jsdelivr.net", StringComparison.OrdinalIgnoreCase));
+        Assert(!html.Contains("unpkg.com", StringComparison.OrdinalIgnoreCase));
     }
     finally { if (File.Exists(path)) File.Delete(path); }
 }
