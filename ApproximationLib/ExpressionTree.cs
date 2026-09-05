@@ -154,8 +154,18 @@ public sealed class ExpressionTree
 
     internal static bool TryVariableIndex(string value, out int index)
     {
-        if (value == "x") { index = 0; return true; }
-        return value.Length > 1 && value[0] == 'x' && int.TryParse(value.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out index);
+        if (value == "x")
+        {
+            index = 0;
+            return true;
+        }
+
+        if (value.Length > 1 && value[0] == 'x' &&
+            int.TryParse(value.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out index))
+            return true;
+
+        index = -1;
+        return false;
     }
 
     private string DisplayLeaf(IReadOnlyList<string>? featureNames)
