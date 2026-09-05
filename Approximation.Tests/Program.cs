@@ -9,7 +9,8 @@ var tests = new (string Name, Action Run)[]
     ("multivariate API recovers an interaction", RecoversInteraction),
     ("seed makes runs reproducible", Reproducible),
     ("invalid input is rejected", RejectsInvalidInput),
-    ("standalone report is produced", ProducesReport)
+    ("standalone report is produced", ProducesReport),
+    ("hybrid symbolic basis plus LSQ handles collinear bases", HybridSymbolicLsq)
 };
 
 int failed = 0;
@@ -111,6 +112,32 @@ static void ProducesReport()
         Assert(!html.Contains("unpkg.com", StringComparison.OrdinalIgnoreCase));
     }
     finally { if (File.Exists(path)) File.Delete(path); }
+}
+
+static void HybridSymbolicLsq()
+{
+    double[] x = Enumerable.Range(-12, 25).Select(i => (double)i).ToArray();
+    double[] y = x.Select(v => 4 * v + 3).ToArray();
+    Config symbolic = FastConfig(19);
+    symbolic.PopulationSize = 60;
+    symbolic.MaxGenerations = 8;
+    symbolic.EarlyStoppingPatience = 3;
+
+    var config = new HybridConfig
+    {
+        BasisModels = 3,
+        BlendFraction = 0.28,
+        Seed = 91,
+        Symbolic = symbolic
+    };
+
+    HybridResult result = new HybridSymbolicLsqRegressor(config).Fit(x, y);
+    Assert(result.BasisFormulas.Count == 3);
+    Assert(result.Coefficients.Count == 3);
+    Assert(result.NumericalRank >= 1 && result.NumericalRank <= 3);
+    Assert(result.Metrics.R2 > 0.999999999);
+    Assert(result.BlendMetrics.R2 > 0.999999999);
+    Near(11, result.Predict(2), 1e-7);
 }
 
 static void Assert(bool condition)
